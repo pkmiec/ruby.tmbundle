@@ -44,19 +44,27 @@ is_test_script = !(ENV["TM_FILEPATH"].match(/(?:\b|_)(?:tc|ts|test)(?:\b|_)/).ni
   File.read(ENV["TM_FILEPATH"]).match(/\brequire\b.+(?:test\/unit|test_helper)/).nil?)
 
 cmd = [ENV['TM_RUBY'] || 'ruby', '-rcatch_exception']
+test_root = nil
 
 if is_test_script and not ENV['TM_FILE_IS_UNTITLED']
   path_ary = ENV['TM_FILEPATH'].split("/")
   if index = path_ary.rindex("test")
-    test_path = "#{File.join(*path_ary[0..index])}:#{File.join(*path_ary[0..-2])}"
-    lib_path  = File.join( *( path_ary[0..-2] +
-                              [".."] * (path_ary.length - index - 1) ) +
-                              ["lib"] )
-    if File.exist? lib_path
-      cmd << "-I#{lib_path}:#{test_path}"
+    test_root  = File.expand_path(File.join(*(path_ary[0..-2] + [".."] * (path_ary.length - index - 1))))
+    # test_path = "#{File.join(*path_ary[0..index])}:#{File.join(*path_ary[0..-2])}"
+    # lib_path  = File.join(test_root, "lib")
+    
+    spring_path = File.join(test_root, "bin", "testunit")
+    if File.exist?(spring_path)
+      cmd << spring_path
     else
-      cmd << "-I#{test_path}"
+      cmd << "-Itest"
+      # if File.exist? lib_path
+      #   cmd << "-I#{lib_path}:#{test_path}"
+      # else
+      #   cmd << "-I#{test_path}"
+      # end
     end
+    
   end
 end
 
@@ -95,11 +103,15 @@ def actual_path_name(path)
   return path, '', path
 end
 
-TextMate::Executor.run( cmd, :version_args => ["--version"],
+Dir.chdir(test_root) if test_root # in order for ruby version to be correct
+TextMate::Executor.run( cmd, :chdir => test_root,
+                             :version_args => ["--version"],
                              :use_hashbang => !ENV.has_key?('TM_RUBY'),
                              :create_error_pipe => true,
                              :script_args  => args ) do |line, type|
+  #  
   if is_test_script and type == :out
+    
     if line =~ /\A[.EF]+\Z/
       line.gsub!(/([.])/, "<span class=\"test ok\">\\1</span>")
       line.gsub!(/([EF])/, "<span class=\"test fail\">\\1</span>")
